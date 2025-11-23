@@ -6,6 +6,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 
+APP_VERSION = "1.1.0"
+
+
 class PortScannerApp:
     def __init__(self):
         self.root = tk.Tk()
@@ -13,7 +16,7 @@ class PortScannerApp:
         self.root.geometry("780x520")
         self.root.configure(bg="#0f172a")
 
-        self.open_ports = []
+        self.open_ports = set()
         self.scanning = False
         self.total_ports = 0
         self.scanned_ports = 0
@@ -28,14 +31,27 @@ class PortScannerApp:
         header = tk.Frame(self.root, bg="#0f172a", pady=20)
         header.pack(fill="x")
 
+        title_row = tk.Frame(header, bg="#0f172a")
+        title_row.pack(fill="x")
+
         title = tk.Label(
-            header,
+            title_row,
             text="Port Scanner",
             fg="#e2e8f0",
             bg="#0f172a",
             font=("Helvetica", 22, "bold"),
         )
-        title.pack()
+        title.pack(side="left")
+
+        version = tk.Label(
+            title_row,
+            text=f"v{APP_VERSION}",
+            fg="#64748b",
+            bg="#0f172a",
+            font=("Helvetica", 10, "bold"),
+            padx=8,
+        )
+        version.pack(side="left")
 
         subtitle = tk.Label(
             header,
@@ -126,8 +142,14 @@ class PortScannerApp:
         stop_btn = ttk.Button(actions, text="Stop", style="Action.TButton", command=self.stop_scan)
         stop_btn.pack(side="left", padx=(10, 0))
 
-        open_btn = ttk.Button(actions, text="Ouvrir les ports", style="Action.TButton", command=self.open_ports_in_browser)
-        open_btn.pack(side="right")
+        self.open_btn = ttk.Button(
+            actions,
+            text="Ouvrir les ports",
+            style="Action.TButton",
+            command=self.open_ports_in_browser,
+        )
+        self.open_btn.state(["disabled"])
+        self.open_btn.pack(side="right")
 
         self.status_label = tk.Label(
             card,
@@ -213,6 +235,7 @@ class PortScannerApp:
         self.scanning = True
         self.scan_button.state(["disabled"])
         self.status_label.config(text="Scan en cours...")
+        self.open_btn.state(["disabled"])
 
         threading.Thread(
             target=self._run_scan,
@@ -262,9 +285,18 @@ class PortScannerApp:
         self.root.after(0, lambda: self.progress.configure(value=value))
 
     def _add_open_port(self, port: int):
-        self.open_ports.append(port)
-        self.listbox.insert(tk.END, f"Port {port} ouvert")
+        if port in self.open_ports:
+            return
+
+        self.open_ports.add(port)
+        self._refresh_open_ports()
         self.status_label.config(text=f"{len(self.open_ports)} port(s) détecté(s) comme ouvert(s)")
+        self.open_btn.state(["!disabled"])
+
+    def _refresh_open_ports(self):
+        self.listbox.delete(0, tk.END)
+        for port in sorted(self.open_ports):
+            self.listbox.insert(tk.END, f"Port {port} ouvert")
 
     def _scan_complete(self):
         if self.scanning:
@@ -277,6 +309,10 @@ class PortScannerApp:
 
         self.scanning = False
         self.scan_button.state(["!disabled"])
+        if self.open_ports:
+            self.open_btn.state(["!disabled"])
+        else:
+            self.open_btn.state(["disabled"])
 
     def open_ports_in_browser(self):
         if not self.open_ports:
@@ -284,8 +320,9 @@ class PortScannerApp:
             return
 
         ip = self.ip_entry.get().strip()
-        for port in self.open_ports:
-            url = f"https://{ip}:{port}"
+        for port in sorted(self.open_ports):
+            scheme = "https" if port == 443 else "http"
+            url = f"{scheme}://{ip}:{port}"
             webbrowser.open(url)
         messagebox.showinfo("Ouverture", "Les ports détectés ont été ouverts dans le navigateur.")
 
